@@ -1,0 +1,12 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:i="jelly:fmt">
+  <l:layout title="${it.fullDisplayName}" norefresh="true">
+		<st:include page="sidepanel.jelly" />
+		<l:main-panel>
+		    <form method="post" action="doDelete">
+		      Attempt to delete the build was not successful. What do you want to do?
+		      <f:submit name="now" value="Try to delete now" /> <f:submit name="automatic" value="Shedule automatic deleting" />
+		    </form>
+		</l:main-panel>
+	</l:layout>
+</j:jelly>
