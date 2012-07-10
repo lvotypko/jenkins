@@ -31,8 +31,20 @@ THE SOFTWARE.
     <f:entry title="${%Excludes}" field="excludes">
       <f:textbox />
     </f:entry>
-    <f:entry title="" field="latestOnly" >
-      <f:checkbox title="${%lastBuildOnly}"/>
+    <f:entry title="Disk saving strategy">
+        <f:block>
+      <f:radioBlock name="saveStrategy" value="none" title="Keep all artefacts" checked="${!instance.latestOnly || !instance.latestAndKeepForever}"
+        help="${instance.descriptor.getHelpFile('none')}">
+      </f:radioBlock>
+      <f:radioBlock name="saveStrategy" value="latestOnly" title="${%lastBuildOnly}" checked="${instance.latestOnly}" help="${instance.descriptor.getHelpFile('latestOnly')}">
+      </f:radioBlock>
+      <f:radioBlock name="saveStrategy" value="latestAndKeepForever" title="Keep only artefacts in last succesful build and locked builds" 
+        checked="${instance.latestAndKeepForever}" help="${instance.descriptor.getHelpFile('latestAndKeepForever')}">
+        <f:entry title="${%Days to keep builds}" description="Numbers days for keeping artefacts in locked builds if it is empty it will be kept forever">
+          <f:number clazz="positive-number" min="1" step="1" name="daysCount" value="${instance.daysCountStr}"/>
+        </f:entry>
+      </f:radioBlock>
+      </f:block>
     </f:entry>
   </f:advanced>
 </j:jelly>

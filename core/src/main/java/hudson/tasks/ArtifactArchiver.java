@@ -40,6 +40,8 @@ import org.kohsuke.stapler.QueryParameter;
 import java.io.File;
 import java.io.IOException;
 
+import java.util.Calendar;
+import java.util.GregorianCalendar;
 import net.sf.json.JSONObject;
 
 /**
@@ -64,14 +66,26 @@ public class ArtifactArchiver extends Recorder {
      */
     private final boolean latestOnly;
     
+    /**
+     * Just keep the last successful and locked artifact set.
+     */
+    private final boolean latestAndKeepForever;
+    
+    /**
+     * Number of days for keeping artefact in locked build, zero means keep artefacts in locked builds forever
+     */
+    private final int daysCount;
+    
     private static final Boolean allowEmptyArchive = 
     	Boolean.getBoolean(ArtifactArchiver.class.getName()+".warnOnEmpty");
 
     @DataBoundConstructor
-    public ArtifactArchiver(String artifacts, String excludes, boolean latestOnly) {
+    public ArtifactArchiver(String artifacts, String excludes, String saveStrategy,int daysCount) {
         this.artifacts = artifacts.trim();
         this.excludes = Util.fixEmptyAndTrim(excludes);
-        this.latestOnly = latestOnly;
+        this.latestOnly = "latestOnly".equals(saveStrategy);
+        this.latestAndKeepForever =  "latestAndKeepForever".equals(saveStrategy);
+        this.daysCount = daysCount; 
     }
 
     public String getArtifacts() {
@@ -85,6 +99,20 @@ public class ArtifactArchiver extends Recorder {
     public boolean isLatestOnly() {
         return latestOnly;
     }
+    
+    public boolean islatestAndKeepForever() {
+        return latestAndKeepForever;
+    }
+     
+     public int getDaysCount(){
+         return daysCount;
+     }
+     
+     public String getDaysCountStr(){
+         if(daysCount<1)
+              return  "";
+         return String.valueOf(daysCount);
+     }
     
     private void listenerWarnOrError(BuildListener listener, String message) {
     	if (allowEmptyArchive) {
@@ -144,7 +172,9 @@ public class ArtifactArchiver extends Recorder {
 
     @Override
     public boolean prebuild(AbstractBuild<?, ?> build, BuildListener listener) {
-        if(latestOnly) {
+        Calendar cal = new GregorianCalendar();
+        cal.add(Calendar.DAY_OF_YEAR,-daysCount);
+        if(latestOnly || latestAndKeepForever) {
             AbstractBuild<?,?> b = build.getProject().getLastCompletedBuild();
             Result bestResultSoFar = Result.NOT_BUILT;
             while(b!=null) {
@@ -153,7 +183,7 @@ public class ArtifactArchiver extends Recorder {
                 } else {
                     // remove old artifacts
                     File ad = b.getArtifactsDir();
-                    if(ad.exists()) {
+                    if(ad.exists() && (latestOnly || !b.isKeepLog() || (latestAndKeepForever && b.isKeepLog() && daysCount>0 && b.getTimestamp().before(cal)))) {
                         listener.getLogger().println(Messages.ArtifactArchiver_DeletingOld(b.getDisplayName()));
                         try {
                             Util.deleteRecursive(ad);
@@ -198,7 +228,12 @@ public class ArtifactArchiver extends Recorder {
 
         @Override
         public ArtifactArchiver newInstance(StaplerRequest req, JSONObject formData) throws FormException {
-            return req.bindJSON(ArtifactArchiver.class,formData);
+            String daysParameter = req.getParameter("daysCount");
+            int days = 0;
+            String strategy = formData.getJSONObject("saveStrategy").getString("value");
+            if(strategy.equals("latestAndKeepForever") && daysParameter !=null && !daysParameter.equals("") && daysParameter.matches("[0-9]"))
+                days = Integer.valueOf(daysParameter);
+            return new ArtifactArchiver(formData.getString("artifacts"),formData.getString("excludes"), strategy, days);
         }
 
         public boolean isApplicable(Class<? extends AbstractProject> jobType) {
