@@ -43,7 +43,25 @@ THE SOFTWARE.
 	      </tr></table>
 	    </div>
 	  </j:if>
-	  
+	  <j:if test="${it.deleter!=null}">
+            <div style="float:right">
+              <table class="middle-align">
+                <tr>
+                  <td>
+                    Deleting:
+                  </td><td>
+                    <t:progressBar tooltip="deleteting"
+                             red="${it.deleter.stuck}"
+                             pos="${it.deleter.progress}"/>
+                  </td><td>
+                  <j:if test="${it.parent.hasAbortPermission()}">
+                    <a href="cancelDeleting"><img src="${imagesURL}/16x16/stop.png" alt="[${%cancel}]" height="16" width="16" /></a>
+                  </j:if>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </j:if> 
 	  <img src="${imagesURL}/48x48/${it.buildStatusUrl}" width="48" height="48" alt="${it.iconColor.description}" tooltip="${it.iconColor.description}" />
 	  <d:invokeBody />
 	</h1>

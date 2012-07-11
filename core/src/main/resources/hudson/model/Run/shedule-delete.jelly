@@ -1,0 +1,22 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:i="jelly:fmt">
+  <l:layout title="${it.fullDisplayName}" norefresh="true">
+  <st:include page="sidepanel.jelly" />
+    <l:main-panel>
+      <form method="post" action="automaticDeleting">
+        <div style="margin: 10px">
+        <b>  Specify count of attempts and time interval for deleting task:</b>
+        </div>
+        <table width="400">
+            <f:entry title="Count of attempts ">
+                <f:number clazz="positive-number" min="1" step="1" name="count"/>
+            </f:entry>
+            <f:entry title="Waiting time after unsuccessful attempt in minutes ">
+                <f:number clazz="positive-number" min="1" step="1" name="period"/>
+            </f:entry>
+        </table>
+        <f:submit name="delete" value="Shedule deleting task" />
+      </form>
+    </l:main-panel>
+  </l:layout>
+</j:jelly>

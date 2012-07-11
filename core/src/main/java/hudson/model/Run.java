@@ -25,6 +25,8 @@
  */
 package hudson.model;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import hudson.console.ConsoleLogFilter;
 import hudson.Functions;
 import hudson.AbortException;
@@ -192,6 +194,8 @@ public abstract class Run <JobT extends Job<JobT,RunT>,RunT extends Run<JobT,Run
      * The current build state.
      */
     protected volatile transient State state;
+    	
+    private transient AutomaticDeleter deleter;
 
     private static enum State {
         /**
@@ -403,6 +407,10 @@ public abstract class Run <JobT extends Job<JobT,RunT>,RunT extends Run<JobT,Run
     @Exported
     public boolean isBuilding() {
         return state.compareTo(State.POST_PRODUCTION) < 0;
+    }
+    
+    public AutomaticDeleter getDeleter(){
+        return deleter;
     }
 
     /**
@@ -1269,7 +1277,7 @@ public abstract class Run <JobT extends Job<JobT,RunT>,RunT extends Run<JobT,Run
      */
     public synchronized void delete() throws IOException {
         RunListener.fireDeleted(this);
-
+       
         // if we have a symlink, delete it, too
         File link = new File(project.getBuildDir(), String.valueOf(getNumber()));
         link.delete();
@@ -1874,9 +1882,41 @@ public abstract class Run <JobT extends Job<JobT,RunT>,RunT extends Run<JobT,Run
             sendError(Messages.Run_UnableToDelete(toString(),why),req,rsp);
             return;
         }
-
-        delete();
+        
+        if(req.getParameter("automatic")!=null){
+            req.getView(this, "shedule-delete.jelly").forward(req, rsp);
+            return;
+        }
+        try{
+            delete();
+        }
+        catch(IOException ex){
+            req.getView(this, "delete-fail.jelly").forward(req, rsp);	
+            return;
+        }
         rsp.sendRedirect2(req.getContextPath()+'/' + getParent().getUrl());
+    }
+    
+    /**
+     * Stop automatic deleting of build.
+     */
+    public synchronized void docancelDeleting( StaplerRequest req, StaplerResponse rsp ) throws IOException, ServletException {
+        if(deleter!=null) //is already cancelled
+            deleter.stopDelete();
+        rsp.sendRedirect(".");
+    }	
+
+    /**
+     * Try to delete build automatically. 
+     */
+    public synchronized void doAutomaticDeleting( StaplerRequest req, StaplerResponse rsp ) throws IOException, ServletException {
+        if(deleter==null && !isBuilding()){
+            int count = Integer.valueOf(req.getParameter("count"));
+            int period = Integer.valueOf(req.getParameter("period"));
+            deleter = new AutomaticDeleter(this,count);
+            deleter.shedule(period*60000);
+        }
+        rsp.sendRedirect(".");
     }
 
     public void setDescription(String description) throws IOException {
@@ -2128,6 +2168,57 @@ public abstract class Run <JobT extends Job<JobT,RunT>,RunT extends Run<JobT,Run
                 "<body style='background-color:white; color:white;'>" +
                 "Not found</body></html>");
             out.flush();
+        }
+    }
+    
+    public class AutomaticDeleter extends TimerTask{
+        
+        private Run run;
+        private int attemptCount;
+        private Timer timer;
+        private int maxCount;
+        
+        public AutomaticDeleter(Run run,int maxCount){
+            this.run=run;
+            this.timer=new Timer();
+            this.maxCount=maxCount;
+            attemptCount=0;
+        }
+        
+        public int getProgress(){
+            int progress = (attemptCount*100)/maxCount;
+            return progress;
+        }
+        
+        public boolean isStuck(){
+            return attemptCount>maxCount; // probably not temporary problem
+        }
+        
+        public void stopDelete(){
+            timer.cancel();
+            run.deleter=null;
+        }
+        
+        public void shedule(int milisec){
+            timer.schedule(this, milisec, milisec);
+        }
+        
+        public void run(){
+            try {
+                run.delete();
+                timer.cancel();
+                run.deleter=null;
+            } catch (IOException ex) {
+                attemptCount++;
+                if(attemptCount>maxCount){
+                    Logger.getLogger(Run.class.getName()).log(Level.WARNING, "Failing to delete build " + run.getDisplayName() + " of job " + run.getParent().getDisplayName(),ex);
+                    timer.cancel();
+                    run.deleter=null;
+                }
+                else{
+                    Logger.getLogger(Run.class.getName()).log(Level.INFO, ("Attempt to delete build " + run.getDisplayName() + " of job " + run.getParent().getDisplayName() + " was not be successful"));
+                }
+            }
         }
     }
 }
