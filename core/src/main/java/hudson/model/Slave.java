@@ -113,6 +113,8 @@ public abstract class Slave extends Node implements Serializable {
      * The starter that will startup this slave.
      */
     private ComputerLauncher launcher;
+    
+    private String userId;
 
     /**
      * Whitespace-separated labels.
@@ -154,7 +156,14 @@ public abstract class Slave extends Node implements Serializable {
         getAssignedLabels();    // compute labels now
         
         this.nodeProperties.replaceBy(nodeProperties);
-
+        Slave node = (Slave) Jenkins.getInstance().getNode(name);
+        if(node!=null){
+            this.userId= node.getUserId(); //if slave has already existed it means that it is only change of its configuration
+        }
+        else{
+            User user = User.current();
+            userId = user!=null ? user.getId() : "anonymous";     
+        }
         if (name.equals(""))
             throw new FormException(Messages.Slave_InvalidConfig_NoName(), null);
 
@@ -175,6 +184,15 @@ public abstract class Slave extends Node implements Serializable {
 
     public String getRemoteFS() {
         return remoteFS;
+    }
+    
+    /**
+     * Return id of user which created this slave
+     * 
+     * @return id of user
+     */
+    public String getUserId() {
+        return userId;
     }
 
     public String getNodeName() {
