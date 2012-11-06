@@ -173,7 +173,7 @@ public class MatrixRun extends Build<MatrixConfiguration,MatrixRun> {
 
             // prepare variables that can be used in the child workspace setting
             EnvVars env = getEnvironment(listener);
-            env.put("COMBINATION",getParent().getCombination().toString('/','/'));  // e.g., "axis1/a/axis2/b"
+            env.put("COMBINATION",getParent().getCombination().toEncodedString('/','/', true));  // e.g., "axis1/a/axis2/b"
             env.put("SHORT_COMBINATION",getParent().getDigestName());               // e.g., "0fbcab35"
             env.put("PARENT_WORKSPACE",baseDir.getRemote());
 

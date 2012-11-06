@@ -180,14 +180,21 @@ public final class Combination extends TreeMap<String,String> implements Compara
      * @param sep2
      *      The separator between axis name and value.
      */
-    public String toString(char sep1, char sep2) {
+    public String toEncodedString(char sep1, char sep2, boolean encode) {
         StringBuilder buf = new StringBuilder();
         for (Map.Entry<String,String> e : entrySet()) {
             if(buf.length()>0) buf.append(sep1);
-            buf.append(e.getKey()).append(sep2).append(e.getValue());
+            String value = e.getValue();
+            if(encode)
+                value = Util.rawEncode(value);
+            buf.append(e.getKey()).append(sep2).append(value);
         }
         if(buf.length()==0) buf.append("default"); // special case to avoid 0-length name.
         return buf.toString();
+    }
+    
+    public String toString(char step1, char step2){
+        return toEncodedString(step1, step2, false);
     }
 
     @Override

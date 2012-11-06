@@ -59,4 +59,13 @@ public class CombinationTest extends TestCase {
     private boolean eval(Combination c, String exp) {
         return c.evalGroovyExpression(axes, exp);
     }
+    
+    public void testEncodedToString(){
+        Map<String,String> r = new HashMap<String, String>();
+        r.put("axis1", "!@#%^&*()_-+[]{}|:;.?/<>abc,&&axis");
+        r.put("axis2", "&&axis");
+        Combination combination = new Combination(r);
+        String encodedPath = combination.toEncodedString('/', '/', true);
+        assertTrue("axis1/!@%23%25%5E%26*()_-+%5B%5D%7B%7D%7C%3A%3B.%3F%2F%3C%3Eabc,%26%26axis/axis2/%26%26axis".equals(encodedPath));
+    }
 }
