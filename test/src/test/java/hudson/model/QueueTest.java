@@ -26,6 +26,7 @@ package hudson.model;
 import com.gargoylesoftware.htmlunit.html.HtmlFileInput;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
+import hudson.Extension;
 import hudson.matrix.AxisList;
 import hudson.matrix.MatrixBuild;
 import hudson.matrix.MatrixProject;
@@ -39,6 +40,8 @@ import hudson.triggers.TimerTrigger.TimerTriggerCause;
 import hudson.util.XStream2;
 import hudson.util.OneShotEvent;
 import hudson.Launcher;
+import hudson.model.AbstractProject.AbstractProjectDescriptor;
+import java.util.concurrent.ExecutionException;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
@@ -61,6 +64,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
+import jenkins.model.Jenkins;
 
 /**
  * @author Kohsuke Kawaguchi
@@ -309,5 +313,69 @@ public class QueueTest extends HudsonTestCase {
         ev.signal();    // let the build complete
         FreeStyleBuild b2 = assertBuildStatusSuccess(v);
         assertSame(b,b2);
+    }
+    
+    public void testPendingsConsistenceAfterErrorDuringMaintain() throws IOException, ExecutionException, InterruptedException{
+        FreeStyleProject project1 = createFreeStyleProject();
+        FreeStyleProject project2 = createFreeStyleProject();
+        jenkins.setNumExecutors(1);
+        SimulateErrorJob projectError = (SimulateErrorJob) jenkins.createProject(SimulateErrorJob.DESCRIPTOR, "throw-error");
+        project1.setAssignedLabel(jenkins.getSelfLabel());
+        project2.setAssignedLabel(jenkins.getSelfLabel());
+        project1.getBuildersList().add(new Shell("sleep 2"));
+        project1.scheduleBuild2(0);
+        QueueTaskFuture<FreeStyleBuild> v = project2.scheduleBuild2(0);
+        projectError.scheduleBuild2(0);
+        Executor e = jenkins.toComputer().getExecutors().get(0);
+        while(!project2.isBuilding()){
+                if(e.isIdle()){
+                 this.assertTrue("Node went to idle before project " + project2.getDisplayName() + " is done", v.isDone());   
+                }
+                if(!e.isAlive()){
+                    break; // executor is dead due to exception in SimulateErrorJob
+                }
+                Thread.sleep(1000);
+        }
+        Queue.getInstance().cancel(projectError); // cancel job which cause dead of executor
+        e.start(); //restart executor
+        while(!e.isIdle()){ //executor should take project2 from queue
+            Thread.sleep(1000); 
+        }
+        //project2 should not be in pendings
+        List<Queue.BuildableItem> items = Queue.getInstance().getPendingItems();
+        for(Queue.BuildableItem item : items){
+            this.assertTrue("Project " + project2.getDisplayName() + " stuck in pendings",item.task.equals(project2)); 
+        }
+    }
+    
+
+    public static class SimulateErrorJob extends FreeStyleProject{
+
+        public SimulateErrorJob(ItemGroup parent, String name){
+            super(parent, name);
+        }
+    
+        @Override
+        public Label getAssignedLabel(){
+            throw new IllegalArgumentException("Test exception");
+        }
+        
+        public DescriptorImpl getDescriptor() {
+            return DESCRIPTOR;
+        }
+
+        @Extension(ordinal=1000)
+        public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
+    
+        public static final class DescriptorImplError extends AbstractProjectDescriptor {
+            public String getDisplayName() {
+                return Messages.FreeStyleProject_DisplayName();
+            }
+
+            public SimulateErrorJob newInstance(ItemGroup parent, String name) {
+                System.err.println("new Instance");
+                return new SimulateErrorJob(parent,name);
+            }
+        }
     }
 }
