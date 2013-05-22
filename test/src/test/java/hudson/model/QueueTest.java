@@ -319,7 +319,28 @@ public class QueueTest extends HudsonTestCase {
         FreeStyleProject project1 = createFreeStyleProject();
         FreeStyleProject project2 = createFreeStyleProject();
         jenkins.setNumExecutors(1);
-        SimulateErrorJob projectError = (SimulateErrorJob) jenkins.createProject(SimulateErrorJob.DESCRIPTOR, "throw-error");
+        TopLevelItemDescriptor descriptor = new TopLevelItemDescriptor(FreeStyleProject.class){
+         @Override
+            public FreeStyleProject newInstance(ItemGroup parent, String name) {
+                return (FreeStyleProject) new FreeStyleProject(parent,name){
+                     @Override
+                    public Label getAssignedLabel(){
+                        throw new IllegalArgumentException("Test exception"); //cause dead of executor
+                    }   
+                     
+                    @Override
+                     public void save(){
+                         //do not need save
+                     }
+            };
+        }
+
+            @Override
+            public String getDisplayName() {
+                return "simulate-error";
+            }
+        };
+        FreeStyleProject projectError = (FreeStyleProject) jenkins.createProject(descriptor, "throw-error");
         project1.setAssignedLabel(jenkins.getSelfLabel());
         project2.setAssignedLabel(jenkins.getSelfLabel());
         project1.getBuildersList().add(new Shell("sleep 2"));
@@ -327,55 +348,25 @@ public class QueueTest extends HudsonTestCase {
         QueueTaskFuture<FreeStyleBuild> v = project2.scheduleBuild2(0);
         projectError.scheduleBuild2(0);
         Executor e = jenkins.toComputer().getExecutors().get(0);
-        while(!project2.isBuilding()){
-                if(e.isIdle()){
-                 this.assertTrue("Node went to idle before project " + project2.getDisplayName() + " is done", v.isDone());   
-                }
-                if(!e.isAlive()){
+        Thread.sleep(2000);
+        while(project2.getLastBuild()==null){
+             if(!e.isAlive()){
                     break; // executor is dead due to exception in SimulateErrorJob
-                }
+             }
+             if(e.isIdle()){
+                 this.assertTrue("Node went to idle before project had" + project2.getDisplayName() + " been started", v.isDone());   
+             }
                 Thread.sleep(1000);
         }
         Queue.getInstance().cancel(projectError); // cancel job which cause dead of executor
-        e.start(); //restart executor
+        e.doYank(); //restart executor
         while(!e.isIdle()){ //executor should take project2 from queue
             Thread.sleep(1000); 
         }
         //project2 should not be in pendings
         List<Queue.BuildableItem> items = Queue.getInstance().getPendingItems();
         for(Queue.BuildableItem item : items){
-            this.assertTrue("Project " + project2.getDisplayName() + " stuck in pendings",item.task.equals(project2)); 
-        }
-    }
-    
-
-    public static class SimulateErrorJob extends FreeStyleProject{
-
-        public SimulateErrorJob(ItemGroup parent, String name){
-            super(parent, name);
-        }
-    
-        @Override
-        public Label getAssignedLabel(){
-            throw new IllegalArgumentException("Test exception");
-        }
-        
-        public DescriptorImpl getDescriptor() {
-            return DESCRIPTOR;
-        }
-
-        @Extension(ordinal=1000)
-        public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
-    
-        public static final class DescriptorImplError extends AbstractProjectDescriptor {
-            public String getDisplayName() {
-                return Messages.FreeStyleProject_DisplayName();
-            }
-
-            public SimulateErrorJob newInstance(ItemGroup parent, String name) {
-                System.err.println("new Instance");
-                return new SimulateErrorJob(parent,name);
-            }
+            this.assertFalse("Project " + project2.getDisplayName() + " stuck in pendings",item.task.getName().equals(project2.getName())); 
         }
     }
 }
